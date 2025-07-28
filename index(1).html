@@ -1,0 +1,257 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Popa's QRGenix</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        .container {
+            text-align: center;
+            padding: 20px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            max-width: 400px;
+            width: 90%;
+        }
+        input[type="text"], input[type="file"] {
+            padding: 10px;
+            width: 100%;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #downloadBtn, #shareBtn {
+            display: none;
+            background-color: #007BFF;
+        }
+        #downloadBtn:hover, #shareBtn:hover {
+            background-color: #0056b3;
+        }
+        #qrcode {
+            margin-top: 20px;
+        }
+        #scanResult {
+            margin-top: 20px;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Popa's QRGenix</h1>
+        <h3>Generate QR Code</h3>
+        <input type="text" id="text" placeholder="Enter text or URL">
+        <button onclick="generateQR()">Generate QR Code</button>
+        <button id="downloadBtn" onclick="downloadQR()">Download QR Code</button>
+        <button id="shareBtn" onclick="shareQR()">Share QR Code</button>
+        <div id="qrcode"></div>
+        <h3>Scan QR Code</h3>
+        <input type="file" id="qrImage" accept="image/*">
+        <button onclick="scanQR()">Scan QR Code</button>
+        <div id="scanResult"></div>
+    </div>
+    <script>
+        let qrDataUrl = ''; // Store QR code data URL for sharing
+
+        function generateQR() {
+            const text = document.getElementById('text').value;
+            const qrcodeDiv = document.getElementById('qrcode');
+            const downloadBtn = document.getElementById('downloadBtn');
+            const shareBtn = document.getElementById('shareBtn');
+            qrcodeDiv.innerHTML = ''; // Clear previous QR code
+            if (text) {
+                try {
+                    new QRCode(qrcodeDiv, {
+                        text: text,
+                        width: 200,
+                        height: 200,
+                        colorDark: "#000000",
+                        colorLight: "#ffffff",
+                        correctLevel: QRCode.CorrectLevel.H
+                    });
+                    setTimeout(() => {
+                        const canvas = qrcodeDiv.querySelector('canvas');
+                        if (canvas) {
+                            qrDataUrl = canvas.toDataURL('image/png');
+                            downloadBtn.style.display = 'inline-block';
+                            shareBtn.style.display = 'inline-block';
+                            console.log('QR code generated successfully');
+                        } else {
+                            alert('Error: QR code canvas not found.');
+                            downloadBtn.style.display = 'none';
+                            shareBtn.style.display = 'none';
+                        }
+                    }, 1000);
+                } catch (error) {
+                    alert('Error generating QR code. Please try again.');
+                    console.error('QR generation error:', error);
+                    downloadBtn.style.display = 'none';
+                    shareBtn.style.display = 'none';
+                }
+            } else {
+                alert('Please enter text or a URL!');
+                downloadBtn.style.display = 'none';
+                shareBtn.style.display = 'none';
+            }
+        }
+
+        function downloadQR() {
+            const qrcodeDiv = document.getElementById('qrcode');
+            const canvas = qrcodeDiv.querySelector('canvas');
+            if (canvas) {
+                try {
+                    const link = document.createElement('a');
+                    link.href = qrDataUrl;
+                    link.download = 'popas_qrgenix.png';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    console.log('Download initiated');
+                } catch (error) {
+                    alert('Failed to download QR code. Please check the console for errors.');
+                    console.error('Download error:', error);
+                }
+            } else {
+                alert('No QR code available to download. Please generate one first.');
+            }
+        }
+
+        function shareQR() {
+            const qrcodeDiv = document.getElementById('qrcode');
+            const canvas = qrcodeDiv.querySelector('canvas');
+            if (canvas) {
+                try {
+                    if (navigator.share && navigator.canShare) {
+                        // Convert data URL to blob for Web Share API
+                        fetch(qrDataUrl)
+                            .then(res => res.blob())
+                            .then(blob => {
+                                const file = new File([blob], 'popas_qrgenix.png', { type: 'image/png' });
+                                navigator.share({
+                                    files: [file],
+                                    title: "Popa's QRGenix",
+                                    text: 'Check out my QR code generated with Popa’s QRGenix!'
+                                }).then(() => {
+                                    console.log('QR code shared successfully');
+                                }).catch(error => {
+                                    console.error('Share error:', error);
+                                    copyToClipboard();
+                                });
+                            });
+                    } else {
+                        copyToClipboard();
+                    }
+                } catch (error) {
+                    alert('Failed to share QR code. Please check the console for errors.');
+                    console.error('Share error:', error);
+                }
+            } else {
+                alert('No QR code available to share. Please generate one first.');
+            }
+        }
+
+        function copyToClipboard() {
+            navigator.clipboard.writeText(qrDataUrl).then(() => {
+                alert('QR code image URL copied to clipboard!');
+            }).catch(error => {
+                alert('Failed to copy QR code URL. Please try downloading instead.');
+                console.error('Clipboard error:', error);
+            });
+        }
+
+        function scanQR() {
+            const qrImage = document.getElementById('qrImage').files[0];
+            const scanResult = document.getElementById('scanResult');
+            if (!qrImage) {
+                alert('Please select an image to scan.');
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const qrCode = jsQR(imageData.data, imageData.width, imageData.height);
+                    if (qrCode) {
+                        scanResult.innerHTML = `<strong>QR Code Content:</strong> ${qrCode.data}`;
+                    } else {
+                        scanResult.innerHTML = 'No QR code found in the image.';
+                    }
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(qrImage);
+        }
+    </script>
+</body>
+</html>
